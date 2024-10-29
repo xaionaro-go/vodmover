@@ -37,6 +37,7 @@ func (m *VODMover) Serve(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unable to connect to OBS: %w", err)
 	}
+	logger.Debugf(ctx, "started serving")
 	for {
 		select {
 		case <-ctx.Done():
@@ -95,10 +96,10 @@ func (m *VODMover) processRecordedFile(
 	for _, rule := range m.config.MoveVODs {
 		doesMatch := wildcard.Match(rule.PatternWildcard, fileName)
 		if !doesMatch {
-			logger.Debugf(ctx, "rule %#+v does NOT match (filename '%s')", fileName)
+			logger.Debugf(ctx, "rule %#+v does NOT match (filename '%s')", rule, fileName)
 			continue
 		}
-		logger.Debugf(ctx, "rule %#+v DOES match (filename '%s')", fileName)
+		logger.Debugf(ctx, "rule %#+v DOES match (filename '%s')", rule, fileName)
 		err := m.moveFile(ctx, filePath, rule.Destination)
 		if err != nil {
 			return fmt.Errorf("unable to move file '%s' to destination '%s': %w", filePath, rule.Destination, err)
@@ -114,7 +115,18 @@ func (m *VODMover) moveFile(
 	filePath string,
 	destination string,
 ) error {
-	return os.Rename(filePath, destination)
+	dstDir := path.Dir(destination)
+	err := os.MkdirAll(dstDir, 0775)
+	if err != nil {
+		return fmt.Errorf("unable to create directory '%s': %w", dstDir, err)
+	}
+
+	err = os.Rename(filePath, destination)
+	if err != nil {
+		return fmt.Errorf("unable to move '%s' to '%s': %w", filePath, destination, err)
+	}
+
+	return nil
 }
 
 func (m *VODMover) connectOBS() (*goobs.Client, error) {
